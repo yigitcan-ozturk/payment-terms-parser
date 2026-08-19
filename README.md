@@ -6,11 +6,9 @@ A lightweight Python CLI for parsing supplier payment terms into structured comm
 
 ## Why payment-terms-parser
 
-Supplier payment terms are often written as free text: `Net 45`, `30% advance, 70% before shipment`, or similar variations. That makes it harder to compare commercial exposure consistently across quotations.
+Supplier payment terms are often written as free text: `Net 45`, `30% advance, 70% before shipment`, or similar variations. That makes buyer exposure difficult to compare consistently.
 
-`payment-terms-parser` converts common payment-term phrases into a small structured result with pre-delivery buyer exposure and a simple risk classification.
-
-The goal is not to replace commercial judgment. It is to make payment-term comparison faster, more consistent and easier to review.
+`payment-terms-parser` turns those phrases into a structured commercial-risk signal that can be consumed directly by `supplier-scorecard`.
 
 ## Features
 
@@ -20,7 +18,9 @@ The goal is not to replace commercial judgment. It is to make payment-term compa
 - Detect payments after delivery
 - Parse Net payment terms
 - Calculate buyer pre-delivery exposure
-- Assign a LOW / MEDIUM / HIGH risk level
+- Expose `commercial_risk` on a 0–100 scale
+- Embed an optional supplier name for cross-tool matching
+- Return/write structured JSON
 - Run with Python only — no third-party runtime dependencies
 
 ## Quick start
@@ -29,43 +29,46 @@ The goal is not to replace commercial judgment. It is to make payment-term compa
 
 - Python 3.11+
 
-### Run
+### Text output
 
 ```bash
 python main.py "30% advance, 70% before shipment"
 ```
 
-Example output:
-
-```text
-PAYMENT TERMS PARSER v0.1
-----------------------------------------------
-Original terms     : 30% advance, 70% before shipment
-Advance payment    : 30%
-Before shipment    : 70%
-After delivery     : 0%
-Buyer exposure     : 100% before delivery
-Risk level         : HIGH
-```
-
-Net terms are also normalized:
+### Pipeline JSON
 
 ```bash
-python main.py "Net 45 days"
+python main.py \
+  "30% advance, 70% before shipment" \
+  --supplier "Supplier A" \
+  --json
 ```
 
-```text
-PAYMENT TERMS PARSER v0.1
-----------------------------------------------
-Original terms     : Net 45 days
-Standardized       : Net 45 days
-Buyer prepayment   : 0%
-Risk level         : LOW
+Write the result to a file:
+
+```bash
+python main.py \
+  "30% advance, 70% before shipment" \
+  --supplier "Supplier A" \
+  --output payment.json
 ```
+
+Example contract:
+
+```json
+{
+  "tool": "payment-terms-parser",
+  "version": "0.2",
+  "supplier": "Supplier A",
+  "buyer_exposure": 100.0,
+  "commercial_risk": 100.0,
+  "risk": "HIGH"
+}
+```
+
+The full payload also contains parsed payment components and normalized term metadata.
 
 ## Risk model
-
-The current model uses buyer exposure before delivery:
 
 | Pre-delivery exposure | Risk |
 | ---: | --- |
@@ -73,11 +76,21 @@ The current model uses buyer exposure before delivery:
 | 20%–79.99% | MEDIUM |
 | 80%+ | HIGH |
 
-The model is intentionally simple and visible in the code so the result can be reviewed instead of treated as a black box.
+For the pipeline, `commercial_risk` equals buyer exposure before delivery.
+
+## Pipeline role
+
+```text
+currency-normalizer ──> rfqdiff ───────────────┐
+                                               │
+payment-terms-parser ──────────────────────────┼─> supplier-scorecard
+                                               │
+vendor-risk-engine ────────────────────────────┘
+```
+
+`supplier-scorecard` reads `commercial_risk` directly from this JSON output and validates the supplier name when one is supplied.
 
 ## Tests
-
-Run the test suite locally with:
 
 ```bash
 python -m unittest discover -s tests -v
@@ -87,35 +100,25 @@ GitHub Actions runs the same suite automatically on supported Python versions.
 
 ## Procurement tooling suite
 
-`payment-terms-parser` is part of a small set of transparent Python tools for supplier and procurement decision support:
-
 | Tool | Role |
 | --- | --- |
-| [`rfqdiff`](https://github.com/yigitcan-ozturk/rfqdiff) | Compare and score supplier quotations |
 | [`currency-normalizer`](https://github.com/yigitcan-ozturk/currency-normalizer) | Normalize quotation values across currencies |
+| [`rfqdiff`](https://github.com/yigitcan-ozturk/rfqdiff) | Compare and score normalized quotations |
 | **[`payment-terms-parser`](https://github.com/yigitcan-ozturk/payment-terms-parser)** | Convert payment terms into commercial-risk signals |
-| [`vendor-risk-engine`](https://github.com/yigitcan-ozturk/vendor-risk-engine) | Score operational, commercial, compliance and dependency risk |
-
-A typical decision flow is:
-
-```text
-currency-normalizer -> payment-terms-parser -> rfqdiff -> vendor-risk-engine
-```
-
-Each tool can run independently. The suite roadmap is to combine their outputs into a composite supplier scorecard.
+| [`vendor-risk-engine`](https://github.com/yigitcan-ozturk/vendor-risk-engine) | Score operational, quality, compliance and dependency risk |
+| [`supplier-scorecard`](https://github.com/yigitcan-ozturk/supplier-scorecard) | Combine upstream signals into one supplier recommendation |
 
 ## Roadmap
 
 - Broader phrase and synonym coverage
 - Split-payment validation
 - Configurable risk thresholds
-- Structured JSON output
-- Integration with `rfqdiff`
-- Composite supplier scorecard integration
+- Structured batch input
+- Supplier payment-term history
 
 ## Status
 
-Early-stage project, currently at **v0.1**. The parser supports common payment-term patterns and a transparent pre-delivery exposure model.
+Early-stage project, currently at **v0.2**. This version adds a stable commercial-risk JSON contract and supplier identity metadata for direct integration with `supplier-scorecard`.
 
 ## License
 
