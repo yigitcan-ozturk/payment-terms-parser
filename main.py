@@ -1,11 +1,19 @@
 import argparse
+import json
 import re
+from pathlib import Path
 
 
-def parse_payment_terms(text):
+VERSION = "0.2"
+
+
+def parse_payment_terms(text, supplier=None):
+    text = str(text)
     text_lower = text.lower().strip()
 
     result = {
+        "tool": "payment-terms-parser",
+        "version": VERSION,
         "original": text,
         "type": "unknown",
         "advance_percent": 0,
@@ -13,10 +21,16 @@ def parse_payment_terms(text):
         "after_delivery_percent": 0,
         "net_days": None,
         "buyer_exposure": 0,
+        "commercial_risk": 0,
         "risk": "REVIEW",
     }
 
-    # Example: Net 45 days
+    if supplier is not None:
+        supplier = str(supplier).strip()
+        if not supplier:
+            raise ValueError("supplier name cannot be empty.")
+        result["supplier"] = supplier
+
     net_match = re.search(r"net\s*(\d+)", text_lower)
 
     if net_match:
@@ -25,12 +39,12 @@ def parse_payment_terms(text):
         result["type"] = "net_terms"
         result["net_days"] = days
         result["buyer_exposure"] = 0
+        result["commercial_risk"] = 0
         result["risk"] = "LOW"
 
         return result
 
     percentages = re.findall(r"(\d+(?:\.\d+)?)\s*%", text_lower)
-
     percentages = [float(value) for value in percentages]
 
     if "advance" in text_lower or "with po" in text_lower:
@@ -57,6 +71,7 @@ def parse_payment_terms(text):
     )
 
     result["buyer_exposure"] = pre_delivery_exposure
+    result["commercial_risk"] = pre_delivery_exposure
 
     if pre_delivery_exposure >= 80:
         result["risk"] = "HIGH"
@@ -77,8 +92,11 @@ def format_percent(value):
 
 def print_report(result):
     print()
-    print("PAYMENT TERMS PARSER v0.1")
+    print(f"PAYMENT TERMS PARSER v{VERSION}")
     print("-" * 46)
+
+    if "supplier" in result:
+        print(f"Supplier           : {result['supplier']}")
 
     print(f"Original terms     : {result['original']}")
 
@@ -107,10 +125,18 @@ def print_report(result):
             f"{format_percent(result['buyer_exposure'])} before delivery"
         )
 
+    print(f"Commercial risk    : {format_percent(result['commercial_risk'])}")
     print(f"Risk level         : {result['risk']}")
 
 
-def main():
+def write_json(payload, path):
+    Path(path).write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+
+def build_parser():
     parser = argparse.ArgumentParser(
         description="Parse and standardize supplier payment terms."
     )
@@ -119,12 +145,42 @@ def main():
         "terms",
         help="Supplier payment terms enclosed in quotes.",
     )
+    parser.add_argument(
+        "--supplier",
+        help="Optional supplier name embedded in the structured result.",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Return structured JSON instead of the text report.",
+    )
+    parser.add_argument(
+        "--output",
+        help="Write the structured result to a JSON file.",
+    )
 
+    return parser
+
+
+def main():
+    parser = build_parser()
     args = parser.parse_args()
 
-    result = parse_payment_terms(args.terms)
+    try:
+        result = parse_payment_terms(
+            args.terms,
+            supplier=args.supplier,
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
 
-    print_report(result)
+    if args.output:
+        write_json(result, args.output)
+
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print_report(result)
 
 
 if __name__ == "__main__":
