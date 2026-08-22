@@ -1,14 +1,16 @@
 # payment-terms-parser
 
-A lightweight Python CLI for parsing supplier payment terms into structured commercial-risk signals.
+**Structured commercial-risk signals from supplier payment terms.**
 
 [![Tests](https://github.com/yigitcan-ozturk/payment-terms-parser/actions/workflows/tests.yml/badge.svg)](https://github.com/yigitcan-ozturk/payment-terms-parser/actions/workflows/tests.yml)
+
+`payment-terms-parser` converts free-text supplier payment terms into explicit buyer-exposure and commercial-risk signals that can be reviewed independently and consumed by `supplier-scorecard`.
 
 ## Why payment-terms-parser
 
 Supplier payment terms are often written as free text: `Net 45`, `30% advance, 70% before shipment`, or similar variations. That makes buyer exposure difficult to compare consistently.
 
-`payment-terms-parser` turns those phrases into a structured commercial-risk signal that can be consumed directly by `supplier-scorecard`.
+This tool keeps the commercial interpretation separate from quotation scoring, supplier-risk scoring and technical compliance. It turns supported payment phrases into a structured contract rather than hiding that logic inside a composite recommendation.
 
 ## Features
 
@@ -80,12 +82,16 @@ For the pipeline, `commercial_risk` equals buyer exposure before delivery.
 
 ## Pipeline role
 
+`payment-terms-parser` owns the commercial payment-exposure signal. Engineering compliance remains independently owned by `bidlint`.
+
 ```text
-currency-normalizer ──> rfqdiff ───────────────┐
-                                               │
-payment-terms-parser ──────────────────────────┼─> supplier-scorecard
-                                               │
-vendor-risk-engine ────────────────────────────┘
+currency-normalizer ──> rfqdiff ────────────────┐
+                                                 │
+payment-terms-parser ───────────────────────────┼──> supplier-scorecard
+                                                 │
+vendor-risk-engine ─────────────────────────────┤
+                                                 │
+bidlint ──> technical compliance ───────────────┘
 ```
 
 `supplier-scorecard` reads `commercial_risk` directly from this JSON output and validates the supplier name when one is supplied.
@@ -98,15 +104,16 @@ python -m unittest discover -s tests -v
 
 GitHub Actions runs the same suite automatically on supported Python versions.
 
-## Procurement tooling suite
+## Engineering procurement toolchain
 
 | Tool | Role |
 | --- | --- |
-| [`currency-normalizer`](https://github.com/yigitcan-ozturk/currency-normalizer) | Normalize quotation values across currencies |
+| [`currency-normalizer`](https://github.com/yigitcan-ozturk/currency-normalizer) | Normalize quotation currencies with explicit FX provenance |
 | [`rfqdiff`](https://github.com/yigitcan-ozturk/rfqdiff) | Compare and score normalized quotations |
 | **[`payment-terms-parser`](https://github.com/yigitcan-ozturk/payment-terms-parser)** | Convert payment terms into commercial-risk signals |
-| [`vendor-risk-engine`](https://github.com/yigitcan-ozturk/vendor-risk-engine) | Score operational, quality, compliance and dependency risk |
-| [`supplier-scorecard`](https://github.com/yigitcan-ozturk/supplier-scorecard) | Combine upstream signals into one supplier recommendation |
+| [`vendor-risk-engine`](https://github.com/yigitcan-ozturk/vendor-risk-engine) | Score delivery, quality, commercial, compliance and dependency risk |
+| [`bidlint`](https://github.com/yigitcan-ozturk/bidlint) | Produce evidence-backed technical-compliance findings |
+| [`supplier-scorecard`](https://github.com/yigitcan-ozturk/supplier-scorecard) | Combine commercial, risk and technical signals into an explainable supplier decision |
 
 ## Roadmap
 
@@ -118,7 +125,7 @@ GitHub Actions runs the same suite automatically on supported Python versions.
 
 ## Status
 
-Early-stage project, currently at **v0.2**. This version adds a stable commercial-risk JSON contract and supplier identity metadata for direct integration with `supplier-scorecard`.
+Early-stage project, currently at **v0.2**. This version provides a stable commercial-risk JSON contract and supplier identity metadata for direct integration with `supplier-scorecard`.
 
 ## License
 
