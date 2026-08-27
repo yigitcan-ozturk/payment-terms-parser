@@ -3,6 +3,8 @@
 **Structured commercial-risk signals from supplier payment terms.**
 
 [![Tests](https://github.com/yigitcan-ozturk/payment-terms-parser/actions/workflows/tests.yml/badge.svg)](https://github.com/yigitcan-ozturk/payment-terms-parser/actions/workflows/tests.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 `payment-terms-parser` converts free-text supplier payment terms into explicit buyer-exposure and commercial-risk signals that can be reviewed independently and consumed by `supplier-scorecard`.
 
@@ -11,6 +13,30 @@
 Supplier payment terms are often written as free text: `Net 45`, `30% advance, 70% before shipment`, or similar variations. That makes buyer exposure difficult to compare consistently.
 
 This tool keeps the commercial interpretation separate from quotation scoring, supplier-risk scoring and technical compliance. It turns supported payment phrases into a structured contract rather than hiding that logic inside a composite recommendation.
+
+## Decision boundary
+
+`payment-terms-parser` is responsible for **supported payment-term interpretation and buyer-exposure signaling**.
+
+It does:
+
+- parse supported supplier payment phrases;
+- detect advance, pre-shipment and post-delivery payment components;
+- parse supported Net terms;
+- calculate pre-delivery buyer exposure;
+- expose a structured `commercial_risk` signal;
+- attach supplier identity for cross-tool matching.
+
+It intentionally does **not**:
+
+- interpret arbitrary contract language;
+- provide legal, tax or accounting advice;
+- infer unsupported payment semantics;
+- compare supplier prices;
+- determine technical compliance;
+- approve contractual terms on behalf of a buyer.
+
+Unsupported or ambiguous commercial language should remain a human review item rather than being forced into a false structured interpretation.
 
 ## Features
 
@@ -94,15 +120,25 @@ vendor-risk-engine ────────────────────�
 bidlint ──> technical compliance ───────────────┘
 ```
 
-`supplier-scorecard` reads `commercial_risk` directly from this JSON output and validates the supplier name when one is supplied.
+[`supplier-scorecard`](https://github.com/yigitcan-ozturk/supplier-scorecard) reads `commercial_risk` directly from this JSON output and validates the supplier name when one is supplied.
 
-## Tests
+## Quality gates
+
+GitHub Actions runs the unit-test suite on Python 3.11, 3.12 and 3.13 for pushes to `main` and pull requests.
+
+Local verification:
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-GitHub Actions runs the same suite automatically on supported Python versions.
+## Engineering principles
+
+- **Structured where supported** — only recognized payment semantics become automatic signals.
+- **Explicit buyer exposure** — commercial risk is tied to observable pre-delivery payment exposure.
+- **No invented contract meaning** — unsupported language stays outside automatic interpretation.
+- **Separation of concerns** — payment exposure remains independent from quotation and technical scoring.
+- **Review before authority** — the output informs commercial review; it does not accept terms.
 
 ## Engineering procurement toolchain
 
