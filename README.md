@@ -23,8 +23,10 @@ It does:
 - parse supported supplier payment phrases;
 - detect advance, pre-shipment and post-delivery payment components;
 - parse supported Net terms;
+- validate that percentage-based payment splits total 100%;
 - calculate pre-delivery buyer exposure;
 - expose a structured `commercial_risk` signal;
+- explicitly flag unsupported or incomplete terms for human review;
 - attach supplier identity for cross-tool matching.
 
 It intentionally does **not**:
@@ -36,7 +38,7 @@ It intentionally does **not**:
 - determine technical compliance;
 - approve contractual terms on behalf of a buyer.
 
-Unsupported or ambiguous commercial language should remain a human review item rather than being forced into a false structured interpretation.
+Unsupported, ambiguous or incomplete commercial language remains a human review item rather than being forced into a false structured interpretation.
 
 ## Features
 
@@ -45,8 +47,10 @@ Unsupported or ambiguous commercial language should remain a human review item r
 - Detect payments before shipment
 - Detect payments after delivery
 - Parse Net payment terms
+- Validate percentage splits before scoring
 - Calculate buyer pre-delivery exposure
-- Expose `commercial_risk` on a 0–100 scale
+- Expose `commercial_risk` on a 0–100 scale for supported terms
+- Fail closed to `REVIEW` with null exposure/risk for unsupported or incomplete terms
 - Embed an optional supplier name for cross-tool matching
 - Return/write structured JSON
 - Run with Python only — no third-party runtime dependencies
@@ -81,16 +85,35 @@ python main.py \
   --output payment.json
 ```
 
-Example contract:
+Example supported contract:
 
 ```json
 {
   "tool": "payment-terms-parser",
-  "version": "0.2",
+  "version": "0.3",
   "supplier": "Supplier A",
   "buyer_exposure": 100.0,
   "commercial_risk": 100.0,
-  "risk": "HIGH"
+  "risk": "HIGH",
+  "supported": true,
+  "review_required": false,
+  "review_reason": null
+}
+```
+
+Example review contract:
+
+```json
+{
+  "tool": "payment-terms-parser",
+  "version": "0.3",
+  "supplier": "Supplier A",
+  "buyer_exposure": null,
+  "commercial_risk": null,
+  "risk": "REVIEW",
+  "supported": false,
+  "review_required": true,
+  "review_reason": "unsupported_or_ambiguous_terms"
 }
 ```
 
@@ -103,8 +126,9 @@ The full payload also contains parsed payment components and normalized term met
 | 0%–19.99% | LOW |
 | 20%–79.99% | MEDIUM |
 | 80%+ | HIGH |
+| Unsupported / incomplete | REVIEW |
 
-For the pipeline, `commercial_risk` equals buyer exposure before delivery.
+For supported terms, `commercial_risk` equals buyer exposure before delivery. For review-required terms, `buyer_exposure` and `commercial_risk` are `null` so downstream tools cannot silently treat unknown commercial language as low risk.
 
 ## Pipeline role
 
@@ -120,7 +144,7 @@ vendor-risk-engine ────────────────────�
 bidlint ──> technical compliance ───────────────┘
 ```
 
-[`supplier-scorecard`](https://github.com/yigitcan-ozturk/supplier-scorecard) reads `commercial_risk` directly from this JSON output and validates the supplier name when one is supplied.
+[`supplier-scorecard`](https://github.com/yigitcan-ozturk/supplier-scorecard) reads `commercial_risk` from this JSON output and validates the supplier name when one is supplied. Consumers should stop automatic scoring when `review_required` is `true`.
 
 ## Quality gates
 
@@ -136,6 +160,7 @@ python -m unittest discover -s tests -v
 
 - **Structured where supported** — only recognized payment semantics become automatic signals.
 - **Explicit buyer exposure** — commercial risk is tied to observable pre-delivery payment exposure.
+- **Fail closed on uncertainty** — unsupported or incomplete payment language cannot become a false low-risk score.
 - **No invented contract meaning** — unsupported language stays outside automatic interpretation.
 - **Separation of concerns** — payment exposure remains independent from quotation and technical scoring.
 - **Review before authority** — the output informs commercial review; it does not accept terms.
@@ -154,14 +179,14 @@ python -m unittest discover -s tests -v
 ## Roadmap
 
 - Broader phrase and synonym coverage
-- Split-payment validation
 - Configurable risk thresholds
 - Structured batch input
 - Supplier payment-term history
+- Stronger cross-tool review-state enforcement
 
 ## Status
 
-Early-stage project, currently at **v0.2**. This version provides a stable commercial-risk JSON contract and supplier identity metadata for direct integration with `supplier-scorecard`.
+Early-stage project, currently at **v0.3**. This version hardens the commercial-risk contract by validating percentage splits and making unsupported or incomplete payment language explicitly review-required instead of silently low risk.
 
 ## License
 

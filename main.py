@@ -4,7 +4,46 @@ import re
 from pathlib import Path
 
 
-VERSION = "0.2"
+VERSION = "0.3"
+
+_PERCENT = r"(\d+(?:\.\d+)?)"
+
+_COMPONENT_PATTERNS = {
+    "advance_percent": (
+        rf"{_PERCENT}\s*%\s*(?:as\s+)?advance\b",
+        rf"{_PERCENT}\s*%\s*with\s+(?:the\s+)?po\b",
+    ),
+    "before_shipment_percent": (
+        rf"{_PERCENT}\s*%\s*before\s+shipment\b",
+    ),
+    "after_delivery_percent": (
+        rf"{_PERCENT}\s*%\s*after\s+delivery\b",
+    ),
+}
+
+
+def _review_result(result, reason):
+    result["buyer_exposure"] = None
+    result["commercial_risk"] = None
+    result["risk"] = "REVIEW"
+    result["supported"] = False
+    result["review_required"] = True
+    result["review_reason"] = reason
+    return result
+
+
+def _extract_components(text_lower):
+    components = {}
+    matched_values = []
+
+    for field, patterns in _COMPONENT_PATTERNS.items():
+        values = []
+        for pattern in patterns:
+            values.extend(float(value) for value in re.findall(pattern, text_lower))
+        components[field] = sum(values)
+        matched_values.extend(values)
+
+    return components, matched_values
 
 
 def parse_payment_terms(text, supplier=None):
@@ -20,9 +59,12 @@ def parse_payment_terms(text, supplier=None):
         "before_shipment_percent": 0,
         "after_delivery_percent": 0,
         "net_days": None,
-        "buyer_exposure": 0,
-        "commercial_risk": 0,
+        "buyer_exposure": None,
+        "commercial_risk": None,
         "risk": "REVIEW",
+        "supported": False,
+        "review_required": True,
+        "review_reason": "unsupported_or_ambiguous_terms",
     }
 
     if supplier is not None:
@@ -31,7 +73,7 @@ def parse_payment_terms(text, supplier=None):
             raise ValueError("supplier name cannot be empty.")
         result["supplier"] = supplier
 
-    net_match = re.search(r"net\s*(\d+)", text_lower)
+    net_match = re.fullmatch(r"net\s*(\d+)(?:\s*days?)?", text_lower)
 
     if net_match:
         days = int(net_match.group(1))
@@ -41,29 +83,37 @@ def parse_payment_terms(text, supplier=None):
         result["buyer_exposure"] = 0
         result["commercial_risk"] = 0
         result["risk"] = "LOW"
+        result["supported"] = True
+        result["review_required"] = False
+        result["review_reason"] = None
 
         return result
 
-    percentages = re.findall(r"(\d+(?:\.\d+)?)\s*%", text_lower)
-    percentages = [float(value) for value in percentages]
+    percentages = [float(value) for value in re.findall(rf"{_PERCENT}\s*%", text_lower)]
+    components, matched_values = _extract_components(text_lower)
 
-    if "advance" in text_lower or "with po" in text_lower:
-        if percentages:
-            result["advance_percent"] = percentages[0]
+    result.update(components)
 
-    if "before shipment" in text_lower:
+    if not matched_values:
+        return _review_result(result, "unsupported_or_ambiguous_terms")
+
+    if len(percentages) != len(matched_values):
+        return _review_result(result, "unclassified_percentage_component")
+
+    total_percent = sum(percentages)
+    if abs(total_percent - 100.0) > 1e-9:
+        return _review_result(result, "payment_split_does_not_total_100")
+
+    if result["advance_percent"] and result["before_shipment_percent"]:
+        result["type"] = "split_pre_delivery"
+    elif sum(value > 0 for value in components.values()) > 1:
+        result["type"] = "split_payment"
+    elif result["advance_percent"]:
+        result["type"] = "advance"
+    elif result["before_shipment_percent"]:
         result["type"] = "pre_shipment"
-
-        if len(percentages) >= 2:
-            result["before_shipment_percent"] = percentages[1]
-        elif percentages:
-            result["before_shipment_percent"] = percentages[0]
-
-    if "after delivery" in text_lower:
+    elif result["after_delivery_percent"]:
         result["type"] = "post_delivery"
-
-        if len(percentages) >= 2:
-            result["after_delivery_percent"] = percentages[1]
 
     pre_delivery_exposure = (
         result["advance_percent"]
@@ -72,6 +122,9 @@ def parse_payment_terms(text, supplier=None):
 
     result["buyer_exposure"] = pre_delivery_exposure
     result["commercial_risk"] = pre_delivery_exposure
+    result["supported"] = True
+    result["review_required"] = False
+    result["review_reason"] = None
 
     if pre_delivery_exposure >= 80:
         result["risk"] = "HIGH"
@@ -84,6 +137,9 @@ def parse_payment_terms(text, supplier=None):
 
 
 def format_percent(value):
+    if value is None:
+        return "N/A"
+
     if value == int(value):
         return f"{int(value)}%"
 
@@ -103,6 +159,10 @@ def print_report(result):
     if result["net_days"] is not None:
         print(f"Standardized       : Net {result['net_days']} days")
         print("Buyer prepayment   : 0%")
+
+    elif result["review_required"]:
+        print("Standardized       : Human review required")
+        print(f"Review reason      : {result['review_reason']}")
 
     else:
         print(
