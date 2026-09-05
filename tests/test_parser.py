@@ -69,9 +69,39 @@ class PaymentTermsParserTests(unittest.TestCase):
         self.assertFalse(result["supported"])
         self.assertTrue(result["review_required"])
 
-    def test_unclassified_percentage_component_requires_review(self):
+    def test_deposit_is_treated_as_advance_payment(self):
         result = parse_payment_terms("50% deposit, 50% before shipment")
 
+        self.assertEqual(result["advance_percent"], 50)
+        self.assertEqual(result["before_shipment_percent"], 50)
+        self.assertEqual(result["buyer_exposure"], 100)
+        self.assertEqual(result["risk"], "HIGH")
+
+    def test_payment_on_placing_order_is_treated_as_advance(self):
+        result = parse_payment_terms(
+            "100% payment would need to be made on placing the order before the order is acknowledged"
+        )
+
+        self.assertEqual(result["advance_percent"], 100)
+        self.assertEqual(result["buyer_exposure"], 100)
+        self.assertEqual(result["risk"], "HIGH")
+        self.assertFalse(result["review_required"])
+
+    def test_proforma_alone_remains_review_required(self):
+        result = parse_payment_terms("Payment terms would be proforma")
+
+        self.assertEqual(result["risk"], "REVIEW")
+        self.assertEqual(result["review_reason"], "unsupported_or_ambiguous_terms")
+        self.assertIsNone(result["commercial_risk"])
+
+    def test_mixed_upfront_and_net_eom_terms_fail_closed_until_modeled(self):
+        result = parse_payment_terms(
+            "50% paid with order on a proforma, upfront payment. "
+            "Then the 50% balance will be due within net 30 day, end of month account "
+            "from invoice date."
+        )
+
+        self.assertEqual(result["advance_percent"], 50)
         self.assertEqual(result["risk"], "REVIEW")
         self.assertEqual(result["review_reason"], "unclassified_percentage_component")
         self.assertIsNone(result["commercial_risk"])
@@ -103,7 +133,7 @@ class PaymentTermsParserTests(unittest.TestCase):
 
         self.assertEqual(result["supplier"], "Supplier A")
         self.assertEqual(result["tool"], "payment-terms-parser")
-        self.assertEqual(result["version"], "0.3")
+        self.assertEqual(result["version"], "0.4")
 
     def test_empty_supplier_is_rejected(self):
         with self.assertRaises(ValueError):
