@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 
-VERSION = "0.3"
+VERSION = "0.4"
 
 _PERCENT = r"(\d+(?:\.\d+)?)"
 
