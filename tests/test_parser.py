@@ -106,6 +106,25 @@ class PaymentTermsParserTests(unittest.TestCase):
         self.assertEqual(result["review_reason"], "unclassified_percentage_component")
         self.assertIsNone(result["commercial_risk"])
 
+    def test_proforma_then_payment_before_processing_remains_review_required(self):
+        result = parse_payment_terms(
+            "Once your order is confirmed, we will prepare a proforma invoice. "
+            "Your order will be processed after you make the payment."
+        )
+
+        self.assertEqual(result["risk"], "REVIEW")
+        self.assertEqual(result["review_reason"], "unsupported_or_ambiguous_terms")
+        self.assertIsNone(result["commercial_risk"])
+
+    def test_down_payment_without_percentage_remains_review_required(self):
+        result = parse_payment_terms(
+            "Lead times are after purchase order, down-payment, and approval of drawings."
+        )
+
+        self.assertEqual(result["risk"], "REVIEW")
+        self.assertEqual(result["review_reason"], "unsupported_or_ambiguous_terms")
+        self.assertIsNone(result["commercial_risk"])
+
     def test_split_over_100_requires_review(self):
         result = parse_payment_terms("60% advance, 60% before shipment")
 
