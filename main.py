@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 
-VERSION = "0.3"
+VERSION = "0.4"
 
 _PERCENT = r"(\d+(?:\.\d+)?)"
 
@@ -12,6 +12,10 @@ _COMPONENT_PATTERNS = {
     "advance_percent": (
         rf"{_PERCENT}\s*%\s*(?:as\s+)?advance\b",
         rf"{_PERCENT}\s*%\s*with\s+(?:the\s+)?po\b",
+        rf"{_PERCENT}\s*%\s*(?:as\s+)?deposit\b",
+        rf"{_PERCENT}\s*%\s*(?:payment\s+)?(?:paid\s+)?with\s+(?:the\s+)?order\b",
+        rf"{_PERCENT}\s*%\s*(?:payment\s+)?(?:would\s+need\s+to\s+be\s+made\s+)?on\s+placing\s+(?:the\s+)?order\b",
+        rf"{_PERCENT}\s*%\s*(?:as\s+)?upfront(?:\s+payment)?\b",
     ),
     "before_shipment_percent": (
         rf"{_PERCENT}\s*%\s*before\s+shipment\b",

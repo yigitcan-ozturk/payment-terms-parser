@@ -42,7 +42,7 @@ Unsupported, ambiguous or incomplete commercial language remains a human review 
 
 ## Features
 
-- Parse common supplier payment terms
+- Parse common supplier payment terms, including deposit / with-order / upfront variants
 - Detect advance payments
 - Detect payments before shipment
 - Detect payments after delivery
@@ -90,7 +90,7 @@ Example supported contract:
 ```json
 {
   "tool": "payment-terms-parser",
-  "version": "0.3",
+  "version": "0.4",
   "supplier": "Supplier A",
   "buyer_exposure": 100.0,
   "commercial_risk": 100.0,
@@ -178,7 +178,7 @@ python -m unittest discover -s tests -v
 
 ## Roadmap
 
-- Broader phrase and synonym coverage
+- Broader phrase and synonym coverage, driven by anonymized real-world supplier wording
 - Configurable risk thresholds
 - Structured batch input
 - Supplier payment-term history
@@ -186,7 +186,7 @@ python -m unittest discover -s tests -v
 
 ## Status
 
-Early-stage project, currently at **v0.3**. This version hardens the commercial-risk contract by validating percentage splits and making unsupported or incomplete payment language explicitly review-required instead of silently low risk.
+Early-stage project, currently at **v0.4**. This version adds corpus-driven support for real supplier wording such as deposits, payment with order, placing the order and upfront payment while keeping ambiguous `proforma` and partially modeled mixed account terms fail-closed for human review.
 
 ## License
 
